@@ -1,4 +1,5 @@
-# HouseOfCards — dos cartas (paralelepípedos discretizados con esferas, CSG + pack)
+# -*- coding: utf-8 -*-
+# HouseOfCards - dos cartas (paralelepipedos discretizados con esferas, CSG + pack)
 # Yade DEM: predicado pack.inAlignedBox + empaquetado denso de esferas
 # Damyan Benjamyn Santander Huerta (reescritura esferas CSG)
 
@@ -9,33 +10,33 @@ import numpy as np
 from math import cos, sin, pi
 
 # =============================================================================
-# PARÁMETROS GEOMÉTRICOS (cartas tipo naipes, algo más gruesas que la realidad)
+# PARAMETROS GEOMETRICOS (cartas tipo naipes, algo mas gruesas que la realidad)
 # =============================================================================
-CARD_LENGTH = 63.0e-3          # m  — lado largo de la carta (eje local x)
-CARD_WIDTH = 88.0e-3           # m  — lado corto en la cara (eje local y)
-CARD_THICKNESS = 2.0e-3        # m  — espesor físico t de la carta
-SPHERE_RADIUS = 2.0 * CARD_THICKNESS   # m  — r = 2·t  → una esfera en el espesor
-PACK_THICKNESS = 2.0 * SPHERE_RADIUS     # m  — altura del predicado = diámetro 2r
+CARD_LENGTH = 63.0e-3          # m - lado largo de la carta (eje local x)
+CARD_WIDTH = 88.0e-3           # m - lado corto en la cara (eje local y)
+CARD_THICKNESS = 2.0e-3        # m - espesor fisico t de la carta
+SPHERE_RADIUS = 2.0 * CARD_THICKNESS   # m - r = 2*t, una esfera en el espesor
+PACK_THICKNESS = 2.0 * SPHERE_RADIUS     # m - altura del predicado = diametro 2r
 
-# Rombo negro en la cara (fracción del tamaño de la carta, en coordenadas locales)
+# Rombo negro en la cara (fraccion del tamano de la carta, en coordenadas locales)
 DIAMOND_RX = 0.12 * CARD_LENGTH
 DIAMOND_RY = 0.12 * CARD_WIDTH
-DIAMOND_Z_TOL = 0.55 * SPHERE_RADIUS   # capas centrales en espesor (|z| pequeño)
+DIAMOND_Z_TOL = 0.55 * SPHERE_RADIUS   # capas centrales en espesor (|z| pequeno)
 
-# Disposición: dos cartas formando /\ (ángulo 60° entre cartas → 30° respecto a la vertical)
-LEAN_FROM_VERTICAL = pi / 6.0        # rad (30°)
+# Disposicion: dos cartas formando /\ (angulo 60 deg entre cartas, 30 deg a la vertical)
+LEAN_FROM_VERTICAL = pi / 6.0        # rad (30 deg)
 FLOOR_Y = 0.0
-BASE_SEPARATION = CARD_WIDTH * sin(LEAN_FROM_VERTICAL)   # separación de centros en x
+BASE_SEPARATION = CARD_WIDTH * sin(LEAN_FROM_VERTICAL)   # separacion de centros en x
 
 # =============================================================================
-# PARÁMETROS FÍSICOS
+# PARAMETROS FISICOS
 # =============================================================================
-RHO_CARD = 800.0               # kg/m³  (cartón)
-RHO_FLOOR = 2500.0             # kg/m³  (suelo rígido efectivo)
+RHO_CARD = 800.0               # kg/m^3  (carton)
+RHO_FLOOR = 2500.0             # kg/m^3  (suelo rigido efectivo)
 YOUNG_CARD = 1.0e7             # Pa
 YOUNG_FLOOR = 1.0e9             # Pa
 POISSON = 0.3
-FRICTION_CARD = atan(0.6)      # rad  (~μ ≈ 0.6 carta–carta / carta–suelo)
+FRICTION_CARD = atan(0.6)      # rad  (~mu ~ 0.6 carta-carta / carta-suelo)
 FRICTION_FLOOR = atan(0.5)
 DAMPING = 0.35
 GRAVITY = (0.0, -9.81, 0.0)
@@ -65,7 +66,7 @@ m_floor = FrictMat(
 )
 
 # =============================================================================
-# GEOMETRÍA CSG: paralelepípedo = pack.inAlignedBox
+# GEOMETRIA CSG: paralelepipedo = pack.inAlignedBox
 # =============================================================================
 
 def card_predicate():
@@ -75,7 +76,7 @@ def card_predicate():
 
 
 def pack_card_sphere_cloud():
-	"""Genera esferas densas dentro del predicado CSG (no añade a O.bodies aún)."""
+	"""Genera esferas densas dentro del predicado CSG (no anade a O.bodies aun)."""
 	pred = card_predicate()
 	sp = pack.randomDensePack(
 		pred,
@@ -89,7 +90,7 @@ def pack_card_sphere_cloud():
 
 
 def is_diamond_center(local_pos):
-	"""Rombo negro en la cara central: |x|/a + |y|/b < 1 y z ≈ 0."""
+	"""Rombo negro en la cara central: |x|/a + |y|/b < 1 y z ~ 0."""
 	x, y, z = local_pos[0], local_pos[1], local_pos[2]
 	if abs(z) > DIAMOND_Z_TOL:
 		return False
@@ -114,7 +115,7 @@ def rot_matrix_axis(axis, angle):
 
 
 def add_card(spheres, center, rot_mat, label):
-	"""Añade esferas de una lista (pos, r) con rotación/traslación y color de carta."""
+	"""Anade esferas de una lista (pos, r) con rotacion/traslacion y color de carta."""
 	n_white, n_black = 0, 0
 	center = np.asarray(center, dtype=float)
 	for pos, r in spheres:
@@ -137,11 +138,11 @@ def card_center_and_rotation(sign):
 	sign = +1 carta inclinada hacia +x, sign = -1 hacia -x.
 	La carta apoya con su borde inferior (y = -CARD_WIDTH/2 local) en el suelo.
 	"""
-	# Inclinación en el plano y–z local → rotación alrededor del eje x mundial
+	# Inclinacion en el plano y-z local, rotacion alrededor del eje x mundial
 	angle = sign * LEAN_FROM_VERTICAL
 	R = rot_matrix_axis((1.0, 0.0, 0.0), angle)
 
-	# Borde inferior local y = -CARD_WIDTH/2 → tras rotar, subir hasta y = FLOOR_Y + r
+	# Borde inferior local y = -CARD_WIDTH/2; tras rotar, subir hasta y = FLOOR_Y + r
 	edge_local = np.array([0.0, -CARD_WIDTH / 2.0, 0.0])
 	edge_world = R.dot(edge_local)
 	y_center = FLOOR_Y + SPHERE_RADIUS - edge_world[1]
@@ -151,9 +152,9 @@ def card_center_and_rotation(sign):
 	return center, R
 
 # =============================================================================
-# CONSTRUCCIÓN DE LA ESCENA
+# CONSTRUCCION DE LA ESCENA
 # =============================================================================
-# Suelo (única pared)
+# Suelo (unica pared)
 O.bodies.append(
 	utils.wall(
 		position=(0.0, FLOOR_Y, 0.0),
@@ -173,7 +174,7 @@ add_card(spheres, *card_center_and_rotation(+1), 'A')
 add_card(spheres, *card_center_and_rotation(-1), 'B')
 
 # =============================================================================
-# MOTOR DE SIMULACIÓN (esferas + roce)
+# MOTOR DE SIMULACION (esferas + roce)
 # =============================================================================
 O.engines = [
 	ForceResetter(),
