@@ -1,122 +1,192 @@
-#Script para simular un granular almacenado en un contenedor como un silo
-#************************************************************************
-#Damyan Benjamyn Santander Huerta
-#Lunes 10 de Abril 2023
-#**********************
+# HouseOfCards — dos cartas (paralelepípedos discretizados con esferas, CSG + pack)
+# Yade DEM: predicado pack.inAlignedBox + empaquetado denso de esferas
+# Damyan Benjamyn Santander Huerta (reescritura esferas CSG)
+
 from __future__ import print_function
-from yade import plot, polyhedra_utils
-from yade import qt
-import numpy as npy
-from numpy import pi
-import random
-#************
-#Materiales a usar
-#*****************
-#acero para las paredes y el piso
-m_pared = PolyhedraMat()
-m_pared.density = 8000  #kg/m^3
-m_pared.young = 20.6E10  #[Pa]
-m_pared.poisson = 0.5
-m_pared.frictionAngle = 0.6  #rad
-#acero temporalmente para las particulas
-m_grano = PolyhedraMat()
-m_grano.density = 1130 #kg/m^3
-m_grano.young = 4e6  #[Pa]
-m_grano.poisson =.5
-m_grano.frictionAngle = 0.6  #rad
-#********************************
-#crear las paredes
-#dimensiones
-px = 15e-2 #[m]
-py = 10e-2 #[m] 40 cm en el montaje, alto de la pared, aunque el muro es infinito hacia arriba
-#pared del piso
-O.bodies.append(utils.wall(position = (0,0,0), axis=1, sense=1, material=m_pared,color = (0,0.8,1)))
-#la posicion es la constante del vector posicion
-#axis es el eje en el que esta orientado
-#sense es la direccion en que empuja los granos, en este caso
-#los devuelve hacia adentro, y se le asigna su Material
-#******************************************************
-#funcion que genera un grano por extrusion de un poligono regular
-#parametros
-#(xc,yc) posicion del centro del granos
-#Radius es el radio del poligonos
-#thickness es la altura de la extrusion
-#resolution es el numero de puntas del poligono
-#angle es el angulo total a recorrer, ideal 2*pi
-#giro es el angulo de giro del poligono
-def custom_polyhedron(xc,yc,a,b,thickness,resolution,angle,giro):
-	f = angle/resolution
-	if angle < 2*pi:
-		resolution = resolution+1
-	x = a*cos(giro)+xc
-	y = b*sin(giro)+yc
-	faces = ((x,y,0),(x,y,thickness))
-	for i in npy.arange(1,5):
-		if i == 1:
-			x = xc
-			y = b+yc
-		if i == 2:
-			x = a+xc
-			y = b+yc
-		if i == 3:
-			x = a+xc
-			y = yc
-		if i == 4:
-			x = xc
-			y = yc
-		new_face=((x,y,0),(x,y,thickness))
-		faces = faces+new_face
-	poli = polyhedra_utils.polyhedra(m_grano,v =  faces)
-	poli.state.blockedDOFs='xYZ'
-	poli.shape.color = (1,0.6,0.1)
-	poli.shape.wire = False
-	#nose puede mover en z ni girar en X ni en Y
-	return poli
-#**************
-#generar granos
-h = -0.07E-2 #[m] altura poligono
-R = 0.2E-2 #[m] radio circulo circunscrito
-angle = 2*pi # angulo final
-b = 9e-2 #[m]
-a = 6e-2 #[m]
-Res =  4
-xc = 0
-yc = 1e-3
-n_c = 2 #numero de cartas
-for i in range(0,2*n_c):
-	t = custom_polyhedron(xc,yc,a,b,h,Res,angle,0)
-	t.state.ori = ((0,1,0),pi/2)
-	t.state.pos = (xc,yc+b/2, (i)*b*npy.cos(pi/6)*0.6)
-	if i+2 & 1 == 0:
-		t.state.ori = ((1,0,0),pi/6)
-	else:
-		t.state.ori = ((1,0,0),-pi/6)
-	O.bodies.append(t)
+from yade import pack, utils, qt
+from yade import *
+import numpy as np
+from math import cos, sin, pi
+
+# =============================================================================
+# PARÁMETROS GEOMÉTRICOS (cartas tipo naipes, algo más gruesas que la realidad)
+# =============================================================================
+CARD_LENGTH = 63.0e-3          # m  — lado largo de la carta (eje local x)
+CARD_WIDTH = 88.0e-3           # m  — lado corto en la cara (eje local y)
+CARD_THICKNESS = 2.0e-3        # m  — espesor físico t de la carta
+SPHERE_RADIUS = 2.0 * CARD_THICKNESS   # m  — r = 2·t  → una esfera en el espesor
+PACK_THICKNESS = 2.0 * SPHERE_RADIUS     # m  — altura del predicado = diámetro 2r
+
+# Rombo negro en la cara (fracción del tamaño de la carta, en coordenadas locales)
+DIAMOND_RX = 0.12 * CARD_LENGTH
+DIAMOND_RY = 0.12 * CARD_WIDTH
+DIAMOND_Z_TOL = 0.55 * SPHERE_RADIUS   # capas centrales en espesor (|z| pequeño)
+
+# Disposición: dos cartas formando /\ (ángulo 60° entre cartas → 30° respecto a la vertical)
+LEAN_FROM_VERTICAL = pi / 6.0        # rad (30°)
+FLOOR_Y = 0.0
+BASE_SEPARATION = CARD_WIDTH * sin(LEAN_FROM_VERTICAL)   # separación de centros en x
+
+# =============================================================================
+# PARÁMETROS FÍSICOS
+# =============================================================================
+RHO_CARD = 800.0               # kg/m³  (cartón)
+RHO_FLOOR = 2500.0             # kg/m³  (suelo rígido efectivo)
+YOUNG_CARD = 1.0e7             # Pa
+YOUNG_FLOOR = 1.0e9             # Pa
+POISSON = 0.3
+FRICTION_CARD = atan(0.6)      # rad  (~μ ≈ 0.6 carta–carta / carta–suelo)
+FRICTION_FLOOR = atan(0.5)
+DAMPING = 0.35
+GRAVITY = (0.0, -9.81, 0.0)
+
+# Empaquetado
+PACK_SEED = 42
+PACK_RREL_FUZZ = 0.0           # todas las esferas con el mismo radio
+
+# Colores (OpenGL)
+COLOR_CARD_WHITE = (1.0, 1.0, 1.0)
+COLOR_DIAMOND_BLACK = (0.0, 0.0, 0.0)
+
+# =============================================================================
+# MATERIALES
+# =============================================================================
+m_card = FrictMat(
+	density=RHO_CARD,
+	young=YOUNG_CARD,
+	poisson=POISSON,
+	frictionAngle=FRICTION_CARD,
+)
+m_floor = FrictMat(
+	density=RHO_FLOOR,
+	young=YOUNG_FLOOR,
+	poisson=POISSON,
+	frictionAngle=FRICTION_FLOOR,
+)
+
+# =============================================================================
+# GEOMETRÍA CSG: paralelepípedo = pack.inAlignedBox
+# =============================================================================
+
+def card_predicate():
+	"""Volumen de la carta como caja alineada (CSG primitivo)."""
+	hx, hy, hz = CARD_LENGTH / 2.0, CARD_WIDTH / 2.0, PACK_THICKNESS / 2.0
+	return pack.inAlignedBox((-hx, -hy, -hz), (hx, hy, hz))
 
 
-#interacciones y fisicas
+def pack_card_sphere_cloud():
+	"""Genera esferas densas dentro del predicado CSG (no añade a O.bodies aún)."""
+	pred = card_predicate()
+	sp = pack.randomDensePack(
+		pred,
+		radius=SPHERE_RADIUS,
+		rRelFuzz=PACK_RREL_FUZZ,
+		material=m_card,
+		returnSpherePack=True,
+		seed=PACK_SEED,
+	)
+	return sp
+
+
+def is_diamond_center(local_pos):
+	"""Rombo negro en la cara central: |x|/a + |y|/b < 1 y z ≈ 0."""
+	x, y, z = local_pos[0], local_pos[1], local_pos[2]
+	if abs(z) > DIAMOND_Z_TOL:
+		return False
+	if DIAMOND_RX <= 0.0 or DIAMOND_RY <= 0.0:
+		return False
+	return (abs(x) / DIAMOND_RX + abs(y) / DIAMOND_RY) < 1.0
+
+
+def rot_matrix_axis(axis, angle):
+	ax = np.asarray(axis, dtype=float)
+	n = np.linalg.norm(ax)
+	if n < 1e-12:
+		return np.eye(3)
+	ax /= n
+	c, s = cos(angle), sin(angle)
+	K = np.array([
+		[0.0, -ax[2], ax[1]],
+		[ax[2], 0.0, -ax[0]],
+		[-ax[1], ax[0], 0.0],
+	])
+	return np.eye(3) + s * K + (1.0 - c) * np.dot(K, K)
+
+
+def add_card(spheres, center, rot_mat, label):
+	"""Añade esferas de una lista (pos, r) con rotación/traslación y color de carta."""
+	n_white, n_black = 0, 0
+	center = np.asarray(center, dtype=float)
+	for pos, r in spheres:
+		local = np.asarray(pos, dtype=float)
+		world = rot_mat.dot(local) + center
+		col = COLOR_DIAMOND_BLACK if is_diamond_center(local) else COLOR_CARD_WHITE
+		if col == COLOR_DIAMOND_BLACK:
+			n_black += 1
+		else:
+			n_white += 1
+		O.bodies.append(sphere(tuple(world), r, material=m_card, color=col))
+	print(
+		'Carta %s: %d esferas (%d blancas, %d negras rombo)'
+		% (label, n_white + n_black, n_white, n_black)
+	)
+
+
+def card_center_and_rotation(sign):
+	"""
+	sign = +1 carta inclinada hacia +x, sign = -1 hacia -x.
+	La carta apoya con su borde inferior (y = -CARD_WIDTH/2 local) en el suelo.
+	"""
+	# Inclinación en el plano y–z local → rotación alrededor del eje x mundial
+	angle = sign * LEAN_FROM_VERTICAL
+	R = rot_matrix_axis((1.0, 0.0, 0.0), angle)
+
+	# Borde inferior local y = -CARD_WIDTH/2 → tras rotar, subir hasta y = FLOOR_Y + r
+	edge_local = np.array([0.0, -CARD_WIDTH / 2.0, 0.0])
+	edge_world = R.dot(edge_local)
+	y_center = FLOOR_Y + SPHERE_RADIUS - edge_world[1]
+
+	x_center = sign * BASE_SEPARATION / 2.0
+	center = np.array([x_center, y_center, 0.0])
+	return center, R
+
+# =============================================================================
+# CONSTRUCCIÓN DE LA ESCENA
+# =============================================================================
+# Suelo (única pared)
+O.bodies.append(
+	utils.wall(
+		position=(0.0, FLOOR_Y, 0.0),
+		axis=1,
+		sense=1,
+		material=m_floor,
+		color=(0.35, 0.35, 0.4),
+	)
+)
+
+print('Empaquetando carta (CSG inAlignedBox + randomDensePack)...')
+sp_card = pack_card_sphere_cloud()
+spheres = [(pos, r) for pos, r in sp_card]
+print('Esferas por carta (aprox.):', len(spheres))
+
+add_card(spheres, *card_center_and_rotation(+1), 'A')
+add_card(spheres, *card_center_and_rotation(-1), 'B')
+
+# =============================================================================
+# MOTOR DE SIMULACIÓN (esferas + roce)
+# =============================================================================
 O.engines = [
-        ForceResetter(),
-        InsertionSortCollider([Bo1_Polyhedra_Aabb(), Bo1_Wall_Aabb(), Bo1_Facet_Aabb()]),
-        InteractionLoop(
-                [Ig2_Wall_Polyhedra_PolyhedraGeom(),
-                 Ig2_Polyhedra_Polyhedra_PolyhedraGeom(),
-                 Ig2_Facet_Polyhedra_PolyhedraGeom()],
-                [Ip2_PolyhedraMat_PolyhedraMat_PolyhedraPhys()],  # collision "physics"
-                [Law2_PolyhedraGeom_PolyhedraPhys_Volumetric()]  # contact law -- apply forces
-        ),
-        NewtonIntegrator(damping=0.4, gravity=(0, -9.81, 0)), #gravedad
-        PyRunner(command='checkUnbalanced()', realPeriod=2),
+	ForceResetter(),
+	InsertionSortCollider([Bo1_Sphere_Aabb(), Bo1_Wall_Aabb()]),
+	InteractionLoop(
+		[Ig2_Sphere_Sphere_ScGeom(), Ig2_Wall_Sphere_ScGeom()],
+		[Ip2_FrictMat_FrictMat_FrictPhys()],
+		[Law2_ScGeom_FrictPhys_CundallStrack()],
+	),
+	NewtonIntegrator(damping=DAMPING, gravity=GRAVITY),
 ]
-O.dt=polyhedra_utils.PWaveTimeStep()*0.05
+
+O.dt = utils.PWaveTimeStep() * 0.4
 O.trackEnergy = True
-# if the unbalanced forces goes below .05, the packing
-# is considered stabilized, therefore we stop collected
-# data history and stop
-def checkUnbalanced():
-	if unbalancedForce() < .05:#0.05
-		O.pause()
-		plot.saveDataTxt('bbb.txt.bz2')
-		# plot.saveGnuplot('bbb') is also possible
+
 V = qt.View()
-O.saveTmp()
