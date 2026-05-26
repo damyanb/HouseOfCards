@@ -41,9 +41,8 @@ FRICTION_FLOOR = atan(0.5)
 DAMPING = 0.35
 GRAVITY = (0.0, -9.81, 0.0)
 
-# Empaquetado
-PACK_SEED = 42
-PACK_RREL_FUZZ = 0.0           # todas las esferas con el mismo radio
+# Empaquetado (regularHexa: documentado con inAlignedBox en Yade 2018; sin seed)
+PACK_GAP = 0.0                 # 0 = empaquetado denso HCP dentro del predicado
 
 # Colores (OpenGL)
 COLOR_CARD_WHITE = (1.0, 1.0, 1.0)
@@ -76,17 +75,18 @@ def card_predicate():
 
 
 def pack_card_sphere_cloud():
-	"""Genera esferas densas dentro del predicado CSG (no anade a O.bodies aun)."""
+	"""
+	Esferas dentro del predicado CSG (pack.inAlignedBox + pack.regularHexa).
+	Yade 2018.02b: randomDensePack no admite 'seed'; regularHexa es el metodo
+	recomendado en el manual de usuario para predicados acotados (ver CSG).
+	"""
 	pred = card_predicate()
-	sp = pack.randomDensePack(
-		pred,
-		radius=SPHERE_RADIUS,
-		rRelFuzz=PACK_RREL_FUZZ,
-		material=m_card,
-		returnSpherePack=True,
-		seed=PACK_SEED,
-	)
-	return sp
+	tmp_bodies = pack.regularHexa(pred, radius=SPHERE_RADIUS, gap=PACK_GAP)
+	spheres = []
+	for b in tmp_bodies:
+		p = b.state.pos
+		spheres.append(((p[0], p[1], p[2]), b.shape.radius))
+	return spheres
 
 
 def is_diamond_center(local_pos):
@@ -165,9 +165,8 @@ O.bodies.append(
 	)
 )
 
-print('Empaquetando carta (CSG inAlignedBox + randomDensePack)...')
-sp_card = pack_card_sphere_cloud()
-spheres = [(pos, r) for pos, r in sp_card]
+print('Empaquetando carta (CSG inAlignedBox + regularHexa)...')
+spheres = pack_card_sphere_cloud()
 print('Esferas por carta (aprox.):', len(spheres))
 
 centerA, rotA = card_center_and_rotation(+1)
