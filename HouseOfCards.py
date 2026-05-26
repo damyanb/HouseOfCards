@@ -170,8 +170,10 @@ sp_card = pack_card_sphere_cloud()
 spheres = [(pos, r) for pos, r in sp_card]
 print('Esferas por carta (aprox.):', len(spheres))
 
-add_card(spheres, *card_center_and_rotation(+1), 'A')
-add_card(spheres, *card_center_and_rotation(-1), 'B')
+centerA, rotA = card_center_and_rotation(+1)
+add_card(spheres, centerA, rotA, 'A')
+centerB, rotB = card_center_and_rotation(-1)
+add_card(spheres, centerB, rotB, 'B')
 
 # =============================================================================
 # MOTOR DE SIMULACION (esferas + roce)
