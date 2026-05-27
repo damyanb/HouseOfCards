@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Casa de cartas: N_TRIANGLES pares /\ consecutivos a lo largo de Z
+# Casa de cartas: N_TRIANGLES pares /\ consecutivos a lo largo de X
 
 from yade import utils, qt
 from yade import *
@@ -15,8 +15,8 @@ CARD_HEIGHT = 88.0e-3      # eje Y (alto de la carta, direccion de la gravedad)
 CARD_THICKNESS = 2.0e-3    # espesor fisico de referencia
 SPHERE_RADIUS = 2.0 * CARD_THICKNESS   # r = 2*t, diametro = espesor simulado
 
-DIAMOND_RY = 0.18 * CARD_HEIGHT   # semiejex Y del rombo en la cara
-DIAMOND_RZ = 0.12 * CARD_LENGTH   # semiejex Z del rombo en la cara
+DIAMOND_RY = 0.30 * CARD_HEIGHT   # semieje Y del rombo (vertical en la cara)
+DIAMOND_RZ = 0.30 * CARD_LENGTH   # semieje Z del rombo (horizontal en la cara)
 
 TILT = pi / 6.0            # inclinacion de cada carta respecto a la vertical (30 deg)
 
@@ -75,16 +75,18 @@ sep_x = (CARD_HEIGHT / 2.0) * sin(TILT)
 # de las esferas quede en y = SPHERE_RADIUS (justo sobre el suelo)
 y_ctr = SPHERE_RADIUS * (1.0 - sin(TILT) - cos(TILT)) + (CARD_HEIGHT / 2.0) * cos(TILT)
 
-# Separacion entre triangulos: largo de la carta + hueco de un diametro
-z_step = CARD_LENGTH + 2.0 * SPHERE_RADIUS
+# Separacion entre triangulos en X:
+# cada triangulo ocupa de (x_centro - sep_x - r) a (x_centro + sep_x + r)
+# dejamos un hueco de 2*r entre triangulos consecutivos
+x_step = 2.0 * sep_x + 4.0 * SPHERE_RADIUS
 
-# Centrar la fila de triangulos en z = 0
-z_start = -((N_TRIANGLES - 1) / 2.0) * z_step
+# Centrar la fila en x = 0
+x_start = -((N_TRIANGLES - 1) / 2.0) * x_step
 
 for i in range(N_TRIANGLES):
-	z_i = z_start + i * z_step
-	add_card(-sep_x, y_ctr, z_i, -TILT, 0.0, -SPHERE_RADIUS)
-	add_card( sep_x, y_ctr, z_i,  TILT, 0.0, +SPHERE_RADIUS)
+	xi = x_start + i * x_step
+	add_card(xi - sep_x, y_ctr, 0.0, -TILT, 0.0, -SPHERE_RADIUS)
+	add_card(xi + sep_x, y_ctr, 0.0,  TILT, 0.0, +SPHERE_RADIUS)
 
 # =============================================================================
 # MOTORES
