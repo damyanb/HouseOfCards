@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-# Dos cartas rigidas (clump) - posicion y orientacion explicitas
+# Dos cartas rigidas (clump) - casa de cartas /\ en vista Y-arriba
 
 from yade import utils, qt
 from yade import *
-from math import pi, sin, sqrt
+from math import pi, sin, cos, sqrt
 
 # --- geometria (m) ---
-CARD_LENGTH = 63.0e-3
-CARD_WIDTH = 88.0e-3
+CARD_LENGTH = 63.0e-3      # eje local x (borde en el suelo)
+CARD_WIDTH = 88.0e-3       # eje local y (altura de la carta)
 CARD_THICKNESS = 2.0e-3
 SPHERE_RADIUS = 2.0 * CARD_THICKNESS
 DIAMOND_RX = 0.10 * CARD_LENGTH
@@ -30,14 +30,14 @@ def sphere_color(x_face, y_face):
 
 def add_card(pos_x, pos_y, pos_z, angle_z, angle_x):
 	"""
-	Crea una carta rigida (clump de esferas).
+	Carta rigida (clump).
 
-	pos_x, pos_y, pos_z : centro geometrico de la carta en el mundo.
-	angle_z : giro alrededor del eje Z mundial (rad), azimut en planta.
-	angle_x : inclinacion alrededor del eje X mundial (rad), inclina la carta
-	          hacia +/-Z (angle_x > 0 inclina el borde +Y local hacia +Z).
+	pos_x, pos_y, pos_z : centro geometrico en el mundo.
+	angle_z : rotacion alrededor de Z (rad). Inclina la carta en el plano XY;
+	          con Y vertical, angle_z < 0 mueve el techo (+Y local) hacia +X.
+	angle_x : rotacion alrededor de X (rad). Inclina hacia +/-Z (0 = cara al frente).
 
-	La carta se genera en reposo en el plano XY local (cara en z=0, espesor en z).
+	Carta en reposo: cara en el plano XY, altura a lo largo de Y, espesor en Z.
 	"""
 	center = Vector3(pos_x, pos_y, pos_z)
 	rot = Quaternion((0, 0, 1), angle_z) * Quaternion((1, 0, 0), angle_x)
@@ -66,13 +66,13 @@ O.bodies.append(
 	utils.wall(position=(0, 0, 0), axis=1, sense=1, material=m_floor, color=(0.4, 0.4, 0.4))
 )
 
-# /\ : bases separadas en X, inclinadas una hacia +Z y otra hacia -Z (se tocan arriba)
+# /\ en vista principal (Y arriba, X derecha): rotar en Z, no en X
 tilt = pi / 6.0
-sep = CARD_WIDTH * sin(tilt) / 2.0
-y_center = CARD_WIDTH / 2.0 * cos(tilt) + SPHERE_RADIUS
+sep = (CARD_WIDTH / 2.0) * sin(tilt)
+y_center = (CARD_WIDTH / 2.0) * cos(tilt) + SPHERE_RADIUS
 
-add_card(-sep, y_center, 0, 0, tilt)    # carta izq. inclinada hacia +Z (centro)
-add_card(sep, y_center, 0, 0, -tilt)   # carta der. inclinada hacia -Z (centro)
+add_card(-sep, y_center, 0, -tilt, 0.0)
+add_card(sep, y_center, 0, tilt, 0.0)
 
 O.engines = [
 	ForceResetter(),
@@ -87,5 +87,6 @@ O.engines = [
 O.dt = utils.PWaveTimeStep() * 0.4
 
 V = qt.View()
-V.viewDir = (1, 1, 1)
+V.viewDir = (0, 0, 1)
+V.upVector = (0, 1, 0)
 V.center()
