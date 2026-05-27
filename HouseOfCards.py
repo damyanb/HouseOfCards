@@ -1,43 +1,48 @@
 # -*- coding: utf-8 -*-
-# Dos cartas rigidas (clump) - /\ con espesor en X, gravedad en -Y
+# Casa de cartas: N_TRIANGLES pares /\ consecutivos a lo largo de Z
 
 from yade import utils, qt
 from yade import *
-from math import pi, sin, cos, sqrt
+from math import pi, sin, cos
 
-# --- geometria (m) ---
-CARD_LENGTH = 63.0e-3      # eje Z (largo, profundidad)
-CARD_HEIGHT = 88.0e-3      # eje Y (alto, con gravedad en -Y)
-CARD_THICKNESS = 2.0e-3
-SPHERE_RADIUS = 2.0 * CARD_THICKNESS   # r = 2*t: diametro = espesor simulado
-DIAMOND_RZ = 0.10 * CARD_LENGTH
-DIAMOND_RY = 0.10 * CARD_HEIGHT
+# =============================================================================
+# PARAMETROS
+# =============================================================================
+N_TRIANGLES = 3            # numero de triangulos /\ en fila
 
-# --- fisica ---
+CARD_LENGTH = 63.0e-3      # eje Z (largo de la carta, profundidad)
+CARD_HEIGHT = 88.0e-3      # eje Y (alto de la carta, direccion de la gravedad)
+CARD_THICKNESS = 2.0e-3    # espesor fisico de referencia
+SPHERE_RADIUS = 2.0 * CARD_THICKNESS   # r = 2*t, diametro = espesor simulado
+
+DIAMOND_RY = 0.18 * CARD_HEIGHT   # semiejex Y del rombo en la cara
+DIAMOND_RZ = 0.12 * CARD_LENGTH   # semiejex Z del rombo en la cara
+
+TILT = pi / 6.0            # inclinacion de cada carta respecto a la vertical (30 deg)
+
 m_card  = FrictMat(density=800,  young=1e7, poisson=0.3, frictionAngle=0.6)
 m_floor = FrictMat(density=2500, young=1e9, poisson=0.3, frictionAngle=0.5)
 
-
+# =============================================================================
+# COLOR: rombo L1 (|y|/RY + |z|/RZ < 1)
+# =============================================================================
 def sphere_color(y_face, z_face):
-	cy = y_face / DIAMOND_RY
-	cz = z_face / DIAMOND_RZ
-	if abs(cy + cz) + abs(cy - cz) < 2.0:
+	if abs(y_face) / DIAMOND_RY + abs(z_face) / DIAMOND_RZ < 1.0:
 		return (0, 0, 0)
 	return (1, 1, 1)
 
 
+# =============================================================================
+# CONSTRUCCION DE UNA CARTA (clump)
+# =============================================================================
 def add_card(pos_x, pos_y, pos_z, angle_z, angle_x, x_local):
 	"""
-	Genera una carta como clump de esferas.
-
-	pos_*   : centro geometrico de la cara interna (x=0 local) en el mundo.
-	angle_z : inclinacion alrededor de Z (rad). >0 inclina la carta hacia -X.
-	angle_x : rotacion alrededor de X (rad). 0 = carta paralela al plano XY global.
-	x_local : offset del centro de esferas respecto a la cara interna.
-	          -SPHERE_RADIUS = cuerpo a la izquierda (carta izquierda del /\ )
-	          +SPHERE_RADIUS = cuerpo a la derecha  (carta derecha  del /\ )
-
-	Marco local: cara interna en x=0, eje Y = alto, eje Z = largo.
+	pos_*   : centro de la cara interna de la carta en coordenadas mundo.
+	angle_z : inclinacion alrededor de Z (rad).
+	angle_x : rotacion alrededor de X (rad).
+	x_local : desplazamiento del centro de esferas desde la cara interna.
+	          -r = cuerpo a la izquierda (carta izquierda del /\)
+	          +r = cuerpo a la derecha  (carta derecha  del /\)
 	"""
 	center = Vector3(pos_x, pos_y, pos_z)
 	rot = Quaternion((0, 0, 1), angle_z) * Quaternion((1, 0, 0), angle_x)
@@ -47,37 +52,43 @@ def add_card(pos_x, pos_y, pos_z, angle_z, angle_x, x_local):
 	while y <= CARD_HEIGHT / 2.0 - SPHERE_RADIUS + 1e-9:
 		z = -CARD_LENGTH / 2.0 + SPHERE_RADIUS
 		while z <= CARD_LENGTH / 2.0 - SPHERE_RADIUS + 1e-9:
-			local = Vector3(x_local, y, z)
-			wp = rot * local + center
-			members.append(
-				sphere(wp, SPHERE_RADIUS, material=m_card,
-				       color=sphere_color(y, z))
-			)
+			wp = rot * Vector3(x_local, y, z) + center
+			members.append(sphere(wp, SPHERE_RADIUS,
+			                      material=m_card,
+			                      color=sphere_color(y, z)))
 			z += step
 		y += step
 	O.bodies.appendClumped(members)
 
 
+# =============================================================================
+# ESCENA
+# =============================================================================
 O.bodies.append(
 	utils.wall(position=(0, 0, 0), axis=1, sense=1,
 	           material=m_floor, color=(0.4, 0.4, 0.4))
 )
 
-# /\ : cara interna de cada carta en x_world=0 al techo
-# El cuerpo de la carta izq. queda a la izquierda  (x_local = -r)
-# El cuerpo de la carta der. queda a la derecha (x_local = +r)
-tilt  = pi / 6.0
-sep_x = (CARD_HEIGHT / 2.0) * sin(tilt)
+# Geometria del /\
+sep_x = (CARD_HEIGHT / 2.0) * sin(TILT)
+# y_ctr: altura del centro de la cara interna para que el borde inferior
+# de las esferas quede en y = SPHERE_RADIUS (justo sobre el suelo)
+y_ctr = SPHERE_RADIUS * (1.0 - sin(TILT) - cos(TILT)) + (CARD_HEIGHT / 2.0) * cos(TILT)
 
-# y_ctr: el centro geometrico de la cara interna tal que la
-# esfera inferior toque el suelo (world y = SPHERE_RADIUS)
-# Deducido de la cinematica de la rotacion:
-y_ctr = (SPHERE_RADIUS * (1.0 - sin(tilt) - cos(tilt))
-         + (CARD_HEIGHT / 2.0) * cos(tilt))
+# Separacion entre triangulos: largo de la carta + hueco de un diametro
+z_step = CARD_LENGTH + 2.0 * SPHERE_RADIUS
 
-add_card(-sep_x, y_ctr, 0.0, -tilt, 0.0, -SPHERE_RADIUS)
-add_card( sep_x, y_ctr, 0.0,  tilt, 0.0, +SPHERE_RADIUS)
+# Centrar la fila de triangulos en z = 0
+z_start = -((N_TRIANGLES - 1) / 2.0) * z_step
 
+for i in range(N_TRIANGLES):
+	z_i = z_start + i * z_step
+	add_card(-sep_x, y_ctr, z_i, -TILT, 0.0, -SPHERE_RADIUS)
+	add_card( sep_x, y_ctr, z_i,  TILT, 0.0, +SPHERE_RADIUS)
+
+# =============================================================================
+# MOTORES
+# =============================================================================
 O.engines = [
 	ForceResetter(),
 	InsertionSortCollider([Bo1_Sphere_Aabb(), Bo1_Wall_Aabb()]),
