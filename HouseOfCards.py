@@ -73,13 +73,14 @@ h_half = (N_Y - 1) * SPHERE_RADIUS   # = 40 mm
 #   y_world_bottom = y_ctr + r*sin(TILT) - h_half*cos(TILT) = r
 y_ctr = SPHERE_RADIUS * (1.0 - sin(TILT)) + h_half * cos(TILT)
 
-# x_step: separacion entre centros de triangulos para evitar solapamiento.
-# La base de la carta inclinada llega hasta:
-#   x_max = sep_x + r*cos(TILT) + h_half*sin(TILT) + r   (superficie exterior)
-# Dos cartas adyacentes no se solapan si x_step >= 2 * x_max.
-# Agregamos 4*r de holgura.
-x_max_card = sep_x + SPHERE_RADIUS * (1.0 + cos(TILT)) + h_half * sin(TILT)
-x_step = 2.0 * x_max_card + 4.0 * SPHERE_RADIUS
+# x_step: separacion minima entre centros de triangulos para no solapar.
+# Centro de la esfera mas exterior en la base (carta der. de T_i, rot +TILT):
+#   x_center_max = sep_x + r*cos(TILT) + h_half*sin(TILT)
+# Para que las superficies de esferas adyacentes se toquen justo:
+#   x_step = 2*x_center_max + 2*r  (centro1 + r = centro2 - r)
+# Agregamos 2*r de holgura para que no se solapen al inicio.
+x_center_max = sep_x + SPHERE_RADIUS * cos(TILT) + h_half * sin(TILT)
+x_step = 2.0 * x_center_max + 4.0 * SPHERE_RADIUS
 
 # =============================================================================
 # ESCENA
