@@ -142,22 +142,30 @@ corner_ids += add_card(0.1 * CARD_LENGTH, y_extra, 0.1 * CARD_LENGTH,
 # =============================================================================
 # GRABACION DE ESQUINAS
 # =============================================================================
-_rec_file   = open('corner_positions.csv', 'w')
+_rec_file    = open('corner_positions.csv', 'w')
 _rec_file.write('t,sphere_id,x,y,z\n')
-_rec_last_t = [-RECORD_DT]
-_rec_active = [True]
+_rec_last_t  = [-RECORD_DT]
+_rec_active  = [True]
+_had_energy  = [False]   # True en cuanto la energia supera el umbral
 
 def record_corners():
+	# Graba primero, luego decide si parar.
+	# La parada solo se activa despues de que el sistema haya tenido
+	# energia > ENERGY_THRESH al menos una vez (la carta cae y choca).
+	# Esto evita que la condicion se dispare en t=0 cuando todo esta quieto.
 	if not _rec_active[0]:
 		return
-	t = O.time
+	t  = O.time
+	ek = utils.kineticEnergy()
+	if ek > ENERGY_THRESH:
+		_had_energy[0] = True
 	if t - _rec_last_t[0] >= RECORD_DT - 1e-12:
 		_rec_last_t[0] = t
 		for sid in corner_ids:
 			p = O.bodies[sid].state.pos
 			_rec_file.write('%g,%d,%.6e,%.6e,%.6e\n' % (t, sid, p[0], p[1], p[2]))
 		_rec_file.flush()
-	if utils.kineticEnergy() < ENERGY_THRESH:
+	if _had_energy[0] and ek < ENERGY_THRESH:
 		_rec_file.close()
 		_rec_active[0] = False
 		O.pause()
