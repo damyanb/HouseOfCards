@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Casa de cartas: piramide completa de N_TRIANGLES niveles
 
-from yade import utils, qt
+from yade import utils
 from yade import *
 from math import pi, sin, cos
 
@@ -79,9 +79,9 @@ def add_card(pos_x, pos_y, pos_z, angle_z, angle_x, x_local):
 			members.append(sphere(wp, SPHERE_RADIUS,
 			                      material=m_card,
 			                      color=sphere_color(y, z)))
-	# ids[0] = clump body id; ids[1:] = sphere member ids (mismo orden que members)
+	# En Yade 2018 appendClumped retorna (clumpId, [memberIds])
 	ids = O.bodies.appendClumped(members)
-	m = ids[1:]   # lista de IDs de esferas miembro
+	m = ids[1]   # lista de IDs de esferas miembro
 	return [m[0 * N_Z + 0],
 	        m[0 * N_Z + (N_Z - 1)],
 	        m[(N_Y - 1) * N_Z + 0],
@@ -161,6 +161,7 @@ def record_corners():
 		_rec_file.flush()
 		_rec_file.close()
 		_rec_active[0] = False
+		O.pause()
 		return
 	t = O.time
 	if t - _rec_last_t[0] < RECORD_DT - 1e-12:
@@ -187,7 +188,4 @@ O.engines = [
 ]
 O.dt = utils.PWaveTimeStep() * 0.4
 
-#V.viewDir = (0, 0, -1)
-#V.upVector = (0, 1, 0)
-#V.center()
-O.run()
+O.run(wait=True)
