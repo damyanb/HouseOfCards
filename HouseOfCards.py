@@ -142,35 +142,25 @@ corner_ids += add_card(0.1 * CARD_LENGTH, y_extra, 0.1 * CARD_LENGTH,
 # =============================================================================
 # GRABACION DE ESQUINAS
 # =============================================================================
-# Abre el CSV y escribe la cabecera antes de correr la simulacion.
 _rec_file   = open('corner_positions.csv', 'w')
 _rec_file.write('t,sphere_id,x,y,z\n')
-_rec_last_t = [-RECORD_DT]   # fuerza grabacion en t=0
+_rec_last_t = [-RECORD_DT]
 _rec_active = [True]
 
 def record_corners():
-	"""
-	Llamada cada iteracion via PyRunner.
-	Graba las coordenadas de las esferas esquina cada RECORD_DT segundos
-	de tiempo fisico y detiene la grabacion cuando la energia cinetica
-	total del sistema cae por debajo de ENERGY_THRESH.
-	"""
 	if not _rec_active[0]:
 		return
-	if utils.kineticEnergy() < ENERGY_THRESH:
+	t = O.time
+	if t - _rec_last_t[0] >= RECORD_DT - 1e-12:
+		_rec_last_t[0] = t
+		for sid in corner_ids:
+			p = O.bodies[sid].state.pos
+			_rec_file.write('%g,%d,%.6e,%.6e,%.6e\n' % (t, sid, p[0], p[1], p[2]))
 		_rec_file.flush()
+	if utils.kineticEnergy() < ENERGY_THRESH:
 		_rec_file.close()
 		_rec_active[0] = False
 		O.pause()
-		return
-	t = O.time
-	if t - _rec_last_t[0] < RECORD_DT - 1e-12:
-		return
-	_rec_last_t[0] = t
-	for sid in corner_ids:
-		p = O.bodies[sid].state.pos
-		_rec_file.write('%g,%d,%.6e,%.6e,%.6e\n' % (t, sid, p[0], p[1], p[2]))
-	_rec_file.flush()
 
 # =============================================================================
 # MOTORES
