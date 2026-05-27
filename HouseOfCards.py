@@ -154,6 +154,18 @@ for k in range(N_TRIANGLES):
 		add_card(x_mid, y_roof, 0.0, pi / 2.0, 0.0, SPHERE_RADIUS)
 
 # =============================================================================
+# CARTA EXTRA: "RUIDO" SOBRE LA PUNTA DE LA PIRAMIDE
+# =============================================================================
+# Posicion: 2 lados largos por encima del pico de la piramide (nivel N-1).
+# El triangulo del ultimo nivel siempre esta centrado en x=0 (por simetria).
+# Angulos arbitrarios distintos a los de la piramide para que caiga con
+# rotacion y derrumbe todo al chocar.
+y_apex  = level_y_roof[N_TRIANGLES - 1]          # superficie de la punta
+y_extra = y_apex + 2.0 * CARD_HEIGHT             # 2 lados largos mas arriba
+
+add_card(0.0, y_extra, 0.0, pi / 3.0, pi / 5.0, SPHERE_RADIUS)
+
+# =============================================================================
 # MOTORES
 # =============================================================================
 O.engines = [
