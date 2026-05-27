@@ -1,25 +1,24 @@
 # -*- coding: utf-8 -*-
-# Dos cartas rigidas (clump) - /\ con gravedad en -Y, espesor en X
+# Dos cartas rigidas (clump) - /\ con espesor en X, gravedad en -Y
 
 from yade import utils, qt
 from yade import *
 from math import pi, sin, cos, sqrt
 
 # --- geometria (m) ---
-CARD_LENGTH = 63.0e-3      # eje Z (profundidad, borde largo)
-CARD_HEIGHT = 88.0e-3      # eje Y (altura de la carta parada)
-CARD_THICKNESS = 2.0e-3    # eje X (espesor, una sola capa de esferas)
-SPHERE_RADIUS = CARD_THICKNESS   # r = t, diametro = 2t = espesor
+CARD_LENGTH = 63.0e-3      # eje Z (largo, profundidad)
+CARD_HEIGHT = 88.0e-3      # eje Y (alto, con gravedad en -Y)
+CARD_THICKNESS = 2.0e-3
+SPHERE_RADIUS = 2.0 * CARD_THICKNESS   # r = 2*t: diametro = espesor simulado
 DIAMOND_RZ = 0.10 * CARD_LENGTH
 DIAMOND_RY = 0.10 * CARD_HEIGHT
 
 # --- fisica ---
-m_card = FrictMat(density=800, young=1e7, poisson=0.3, frictionAngle=0.6)
+m_card  = FrictMat(density=800,  young=1e7, poisson=0.3, frictionAngle=0.6)
 m_floor = FrictMat(density=2500, young=1e9, poisson=0.3, frictionAngle=0.5)
 
 
 def sphere_color(y_face, z_face):
-	# rombo en la cara YZ de la carta
 	cy = y_face / DIAMOND_RY
 	cz = z_face / DIAMOND_RZ
 	if abs(cy + cz) + abs(cy - cz) < 2.0:
@@ -27,59 +26,57 @@ def sphere_color(y_face, z_face):
 	return (1, 1, 1)
 
 
-def add_card(pos_x, pos_y, pos_z, angle_z, angle_x):
+def add_card(pos_x, pos_y, pos_z, angle_z, angle_x, x_local):
 	"""
-	Carta rigida (clump de esferas).
+	Genera una carta como clump de esferas.
 
-	Marco local de la carta en reposo:
-	  X: espesor (una esfera de diametro, centro en x=0)
-	  Y: altura  (de -CARD_HEIGHT/2 a +CARD_HEIGHT/2)
-	  Z: largo   (de -CARD_LENGTH/2 a +CARD_LENGTH/2)
+	pos_*   : centro geometrico de la cara interna (x=0 local) en el mundo.
+	angle_z : inclinacion alrededor de Z (rad). >0 inclina la carta hacia -X.
+	angle_x : rotacion alrededor de X (rad). 0 = carta paralela al plano XY global.
+	x_local : offset del centro de esferas respecto a la cara interna.
+	          -SPHERE_RADIUS = cuerpo a la izquierda (carta izquierda del /\ )
+	          +SPHERE_RADIUS = cuerpo a la derecha  (carta derecha  del /\ )
 
-	angle_z: inclinacion en el plano XY (rad).
-	         >0 inclina el techo hacia -X, <0 hacia +X.
-	angle_x: rotacion en el plano YZ (rad, normalmente 0).
-
-	pos_* : centro geometrico de la carta en el mundo.
+	Marco local: cara interna en x=0, eje Y = alto, eje Z = largo.
 	"""
 	center = Vector3(pos_x, pos_y, pos_z)
 	rot = Quaternion((0, 0, 1), angle_z) * Quaternion((1, 0, 0), angle_x)
 	step = 2.0 * SPHERE_RADIUS
 	members = []
-	# cara en el plano YZ, espesor en X (x=0)
 	y = -CARD_HEIGHT / 2.0 + SPHERE_RADIUS
 	while y <= CARD_HEIGHT / 2.0 - SPHERE_RADIUS + 1e-9:
 		z = -CARD_LENGTH / 2.0 + SPHERE_RADIUS
 		while z <= CARD_LENGTH / 2.0 - SPHERE_RADIUS + 1e-9:
-			local = Vector3(0, y, z)
+			local = Vector3(x_local, y, z)
 			wp = rot * local + center
 			members.append(
-				sphere(
-					wp,
-					SPHERE_RADIUS,
-					material=m_card,
-					color=sphere_color(y, z),
-				)
+				sphere(wp, SPHERE_RADIUS, material=m_card,
+				       color=sphere_color(y, z))
 			)
 			z += step
 		y += step
 	O.bodies.appendClumped(members)
 
 
-# suelo en Y=0, gravedad en -Y
 O.bodies.append(
-	utils.wall(position=(0, 0, 0), axis=1, sense=1, material=m_floor, color=(0.4, 0.4, 0.4))
+	utils.wall(position=(0, 0, 0), axis=1, sense=1,
+	           material=m_floor, color=(0.4, 0.4, 0.4))
 )
 
-# /\ : inclinacion alrededor de Z
-# carta izq. en -X, inclinada -tilt (techo hacia +X = centro)
-# carta der. en +X, inclinada +tilt (techo hacia -X = centro)
-tilt   = pi / 6.0
-sep_x  = (CARD_HEIGHT / 2.0) * sin(tilt)
-y_ctr  = SPHERE_RADIUS + (CARD_HEIGHT / 2.0) * cos(tilt)
+# /\ : cara interna de cada carta en x_world=0 al techo
+# El cuerpo de la carta izq. queda a la izquierda  (x_local = -r)
+# El cuerpo de la carta der. queda a la derecha (x_local = +r)
+tilt  = pi / 6.0
+sep_x = (CARD_HEIGHT / 2.0) * sin(tilt)
 
-add_card(-sep_x, y_ctr, 0.0, -tilt, 0.0)
-add_card( sep_x, y_ctr, 0.0,  tilt, 0.0)
+# y_ctr: el centro geometrico de la cara interna tal que la
+# esfera inferior toque el suelo (world y = SPHERE_RADIUS)
+# Deducido de la cinematica de la rotacion:
+y_ctr = (SPHERE_RADIUS * (1.0 - sin(tilt) - cos(tilt))
+         + (CARD_HEIGHT / 2.0) * cos(tilt))
+
+add_card(-sep_x, y_ctr, 0.0, -tilt, 0.0, -SPHERE_RADIUS)
+add_card( sep_x, y_ctr, 0.0,  tilt, 0.0, +SPHERE_RADIUS)
 
 O.engines = [
 	ForceResetter(),
@@ -94,6 +91,6 @@ O.engines = [
 O.dt = utils.PWaveTimeStep() * 0.4
 
 V = qt.View()
-V.viewDir = (0, 0, -1)   # mirar desde +Z hacia el origen
-V.upVector = (0, 1, 0)   # Y arriba
+V.viewDir = (0, 0, -1)
+V.upVector = (0, 1, 0)
 V.center()
