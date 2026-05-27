@@ -46,7 +46,7 @@ x_step = CARD_HEIGHT
 # PARAMETROS DE GRABACION
 # =============================================================================
 RECORD_DT     = 0.1   # intervalo de tiempo fisico entre grabaciones (s)
-ENERGY_THRESH = 0.1   # umbral de energia cinetica para detener la grabacion (J)
+ENERGY_THRESH = 0.01  # umbral de energia cinetica para detener la grabacion (J)
 
 # =============================================================================
 # FUNCIONES
